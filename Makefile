@@ -16,20 +16,24 @@ LOWER_CONFIG := $(shell echo $(CONFIG) | tr A-Z a-z)
 # files or folders. This allows us to use target names that are the same as
 # the folders we use, without make getting confused and trying to create files
 # or folders with the same names.
-.PHONY: all target_firmware target_tests native_tests clean reset
+.PHONY: all external_deps target_firmware target_tests native_tests clean reset
 
 # The default target if no specific target was specified = build all executables
-all: target_firmware target_tests native_tests
+all: external_deps target_firmware target_tests native_tests
+
+external_deps:
+	@$(MAKE) --directory=$(ROOTDIR)/external_deps --no-builtin-rules\
+	  --makefile=$(ROOTDIR)/external_deps/Makefile
 
 target_firmware:
 	@$(MAKE) --directory=$(ROOTDIR)/build/target_firmware_/$(LOWER_CONFIG) --no-builtin-rules\
 	  --makefile=$(ROOTDIR)/target_firmware/Makefile
 
-target_tests:
+target_tests: external_deps
 	@$(MAKE) --directory=$(ROOTDIR)/build/target_test_/$(LOWER_CONFIG) --no-builtin-rules\
 	  --makefile=$(ROOTDIR)/target_test/Makefile
 
-native_tests:
+native_tests: external_deps
 	@$(MAKE) --directory=$(ROOTDIR)/build/native_test_/$(LOWER_CONFIG) --no-builtin-rules\
 	  --makefile=$(ROOTDIR)/native_test/Makefile
 
