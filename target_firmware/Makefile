@@ -10,18 +10,25 @@ endif
 BUILDROOT := $(PROJROOT)/build/target_firmware_
 CONFIG_LOWER := $(shell echo $(CONFIG) | tr A-Z a-z)
 BUILDDIR := $(BUILDROOT)/$(CONFIG_LOWER)
+DEPSROOT := $(PROJROOT)/build/deps_
 
 .PHONY: all
 all: target_firmware
 
 include $(PROJROOT)/configs_target.mk
-include $(wildcard $(BUILDDIR)/*.dep)
 
+ifeq (RELEASE,$(CONFIG))
+SEP4_LIB := sep4_hw_rel
+else
+SEP4_LIB := sep4_hw_dbg
+endif
+
+SEP4LIB_DIR := $(PROJROOT)/build/deps_/sep4lib
 PROD_SRCDIR := $(PROJROOT)/target_firmware/src
-INCLUDEDIRS := -I$(PROD_SRCDIR) -I$(BUILDDIR)
+INCLUDEDIRS := -I$(PROD_SRCDIR) -I$(SEP4LIB_DIR)/include -I$(BUILDDIR)
 
-vpath %.h $(PROD_SRCDIR)
-vpath %.c $(PROD_SRCDIR)
+vpath %.h $(PROD_SRCDIR) $(SEP4LIB_DIR)/include $(BUILDDIR)
+vpath %.c $(PROD_SRCDIR) $(BUILDDIR)
 
 SRCS := $(wildcard $(PROD_SRCDIR)/*.c)
 OBJS := $(patsubst $(PROD_SRCDIR)/%.c,$(BUILDDIR)/%.o,$(SRCS))
@@ -32,12 +39,15 @@ $(BUILDROOT)/release:
 $(BUILDROOT)/debug:
 	mkdir -p $(BUILDROOT)/debug
 
-init: $(BUILDROOT)/release $(BUILDROOT)/debug
+init: $(BUILDROOT)/release $(BUILDROOT)/debug $(DEPSROOT)/.installed_sep4lib
+
+$(DEPSROOT)/.installed_sep4lib:
+	@$(MAKE) --directory=$(DEPSROOT) --no-builtin-rules --makefile=$(PROJROOT)/external_deps/Makefile
 
 # The firmware file effectively depends on all .c files in $(APP_SRC).
 $(BUILDDIR)/firmware.hex: $(OBJS)
 	cd $(BUILDDIR);\
-	$(CC) $(CFLAGS) $(LDFLAGS) -o firmware.elf $(notdir $^) -Wl,--library-path $(WORKSPACE)/build/lib -Wl,-Map=firmware.map -Wl,--start-group $(LIBS) -Wl,--end-group ;\
+	$(CC) $(CFLAGS) $(LDFLAGS) -o firmware.elf $(notdir $^) -Wl,--library-path $(SEP4LIB_DIR) -Wl,-Map=firmware.map -Wl,--start-group $(LIBS) -l$(SEP4_LIB) -Wl,--end-group ;\
 	avr-objcopy -O ihex -R .eeprom -R .fuse -R .lock -R .signature -R .user_signatures firmware.elf firmware.hex ;\
 	avr-objcopy -j .eeprom --set-section-flags=.eeprom=alloc,load --change-section-lma .eeprom=0 --no-change-warnings -O ihex firmware.elf firmware.eep || exit 0 ;\
 	avr-objdump -h -S firmware.elf > firmware.lss ;\
@@ -46,8 +56,7 @@ $(BUILDDIR)/firmware.hex: $(OBJS)
 
 $(BUILDDIR)/%.o: %.c
 	cd $(BUILDDIR); \
-	$(CC) -c $(CFLAGS) -MD -MP -MT "$@" -MT"$(patsubst %.o,%.dep,$@)" \
-	 -MF "$(patsubst %.o,%.dep,$@)" $(INCLUDEDIRS) -o $@ $<
+	$(CC) -c $(CFLAGS) $(INCLUDEDIRS) -o $@ $<
 
 compile: init $(lastword $(MAKECMDGOALS))
 	cd $(BUILDDIR); \

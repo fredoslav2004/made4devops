@@ -16,16 +16,23 @@ WORKSPACE := $(PROJROOT)/native_test
 all: native_tests
 
 include $(PROJROOT)/configs_native.mk
-include $(wildcard $(BUILDDIR)/*.dep)
 
 UNITY_DIR   := $(DEPSROOT)/unity
 CMOCK_DIR   := $(DEPSROOT)/cmock
 FFF_DIR     := $(DEPSROOT)/fff
+SEP4LIB_DIR := $(PROJROOT)/build/deps_/sep4lib
+
 TEST_SRCDIR := $(PROJROOT)/native_test/src
 PROD_SRCDIR := $(PROJROOT)/target_firmware/src
-INCLUDEDIRS :=  -I$(UNITY_DIR)/src -I$(CMOCK_DIR)/src -I$(FFF_DIR) -I$(PROD_SRCDIR) -I$(TEST_SRCDIR) -I$(BUILDDIR)
+INCLUDEDIRS := -I$(UNITY_DIR)/src \
+				-I$(CMOCK_DIR)/src \
+				-I$(FFF_DIR) \
+				-I$(PROD_SRCDIR) \
+				-I$(TEST_SRCDIR) \
+				-I$(SEP4LIB_DIR)/include \
+				-I$(BUILDDIR)
 
-vpath %.h $(TEST_SRCDIR) $(PROD_SRCDIR) $(UNITY_DIR)/src $(CMOCK_DIR)/src $(FFF_DIR) $(BUILDDIR)
+vpath %.h $(TEST_SRCDIR) $(PROD_SRCDIR) $(UNITY_DIR)/src $(CMOCK_DIR)/src $(FFF_DIR) $(SEP4LIB_DIR)/include $(BUILDDIR)
 vpath %.c $(TEST_SRCDIR) $(PROD_SRCDIR) $(UNITY_DIR)/src $(CMOCK_DIR)/src $(BUILDDIR)
 vpath %.cpp $(TEST_SRCDIR) $(PROD_SRCDIR) $(UNITY_DIR)/src $(CMOCK_DIR)/src $(BUILDDIR)
 
@@ -37,7 +44,11 @@ $(BUILDROOT)/release:
 $(BUILDROOT)/debug:
 	mkdir -p $(BUILDROOT)/debug
 
-init: $(BUILDROOT)/release $(BUILDROOT)/debug
+init: $(BUILDROOT)/release $(BUILDROOT)/debug \
+	$(DEPSROOT)/.installed_unity \
+	$(DEPSROOT)/.installed_fff \
+	$(DEPSROOT)/.installed_cmock \
+	$(DEPSROOT)/.installed_sep4lib
 
 $(DEPSROOT)/.installed_unity:
 	@$(MAKE) --directory=$(DEPSROOT) --no-builtin-rules --makefile=$(PROJROOT)/external_deps/Makefile
@@ -48,10 +59,13 @@ $(DEPSROOT)/.installed_cmock:
 $(DEPSROOT)/.installed_fff:
 	@$(MAKE) --directory=$(DEPSROOT) --no-builtin-rules --makefile=$(PROJROOT)/external_deps/Makefile
 
+$(DEPSROOT)/.installed_sep4lib:
+	@$(MAKE) --directory=$(DEPSROOT) --no-builtin-rules --makefile=$(PROJROOT)/external_deps/Makefile
+
+
 $(BUILDDIR)/%.o: %.c
 	cd $(BUILDDIR); \
-	$(CC) -c $(CFLAGS) -MD -MP -MT "$@" -MT"$(patsubst %.o,%.dep,$@)" \
-	 -MF "$(patsubst %.o,%.dep,$@)" $(INCLUDEDIRS) --coverage -o $@ $<
+	$(CC) -c $(CFLAGS) $(INCLUDEDIRS) --coverage -o $@ $<
 
 compile: init $(lastword $(MAKECMDGOALS))
 	cd $(BUILDDIR); \
@@ -61,8 +75,7 @@ compile: init $(lastword $(MAKECMDGOALS))
 
 #%.o: %.cpp
 #	cd $(BUILDDIR); \
-#	$(GCC) -c $(CPPFLAGS) -Werror -MD -MP -MT "$@" -MT "$(patsubst %.o,%.dep,$@)" \
-#	 -MF "$(patsubst %.o,%.dep,$@)" $(INCLUDEDIRS) -o $@ $<
+#	$(GCC) -c $(CPPFLAGS) -Werror $(INCLUDEDIRS) -o $@ $<
 
 clean:
 	@find $(BUILDROOT)/debug -type d -mindepth 1 | xargs rm -rf
@@ -73,8 +86,7 @@ clean:
 $(BUILDDIR)/%_runner.o: %.c
 	ruby $(UNITY_DIR)/auto/generate_test_runner.rb $< $(patsubst %.o,%.c,$@)
 	cd $(BUILDDIR); \
-	$(CC) -c $(CFLAGS) -Werror -MD -MP -MT "$@" -MT "$(patsubst %.o,%.dep,$@)" \
-	 -MF "$(patsubst %.o,%.dep,$@)" $(INCLUDEDIRS) -o $@ $(patsubst %.o,%.c,$@)
+	$(CC) -c $(CFLAGS) -Werror $(INCLUDEDIRS) -o $@ $(patsubst %.o,%.c,$@)
 
 $(BUILDDIR)/mocks/Mock%.o: %.h
 	cd $(BUILDDIR); \
